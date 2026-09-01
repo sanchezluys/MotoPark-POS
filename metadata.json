@@ -1,0 +1,6 @@
+{
+  "name": "MotoPark",
+  "description": "Control de parqueadero y taller offline con entradas/salidas por placa, fotos, OCR, custodia de cascos, monedas USD/COL/SOL, separador de miles y tickets compartibles.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
