@@ -1,21 +1,49 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# ProGuard and R8 Obfuscation & Optimization Rules
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Reglas de optimización avanzada y ofuscación agresiva
+-optimizationpasses 5
+-allowaccessmodification
+-repackageclasses ''
+-dontusemixedcaseclassnames
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Ofuscación de atributos y nombres de archivos de código fuente
+-renamesourcefileattribute SourceFile
+-keepattributes SourceFile,LineNumberTable,InnerClasses,EnclosingMethod,Signature,*Annotation*
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Eliminar logs informativos y de depuración en la compilación de producción
+-assumenosideeffects class android.util.Log {
+    public static boolean isLoggable(java.lang.String, int);
+    public static int v(...);
+    public static int d(...);
+}
+
+# Room Database & Modelos de datos
+-keep @androidx.room.Entity class * { *; }
+-keep @androidx.room.Dao class * { *; }
+-keep class * extends androidx.room.RoomDatabase { *; }
+-keepclassmembers class * extends androidx.room.RoomDatabase {
+    <init>(...);
+}
+-keep class com.example.data.model.** { *; }
+-keep class com.example.data.dao.** { *; }
+-dontwarn androidx.room.paging.**
+
+# ML Kit Text Recognition (OCR)
+-keep class com.google.mlkit.** { *; }
+-dontwarn com.google.mlkit.**
+
+# Kotlin Coroutines
+-keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
+-keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
+-keepclassmembers class kotlinx.coroutines.** {
+    volatile <fields>;
+}
+
+# Jetpack Compose
+-keep class androidx.compose.runtime.** { *; }
+-dontwarn androidx.compose.**
+
+# Coil Image Loader
+-keep class coil.** { *; }
+-dontwarn coil.**
+
