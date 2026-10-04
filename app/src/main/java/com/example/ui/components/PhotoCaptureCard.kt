@@ -186,7 +186,11 @@ fun PhotoCaptureCard(
                         .background(Color.Black)
                 ) {
                     AsyncImage(
-                        model = File(photoPath),
+                        model = coil.request.ImageRequest.Builder(LocalContext.current)
+                            .data(File(photoPath))
+                            .size(512, 512)
+                            .crossfade(true)
+                            .build(),
                         contentDescription = title,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()

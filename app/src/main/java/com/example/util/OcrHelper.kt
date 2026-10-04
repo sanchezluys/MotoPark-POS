@@ -48,8 +48,13 @@ object OcrHelper {
     )
 
     suspend fun recognizeTextFromBitmap(bitmap: Bitmap): OcrExtractionResult = withContext(Dispatchers.Default) {
-        val image = InputImage.fromBitmap(bitmap, 0)
-        processImage(image)
+        val downsampled = PhotoStorageHelper.downsampleBitmap(bitmap, 1280)
+        val image = InputImage.fromBitmap(downsampled, 0)
+        val result = processImage(image)
+        if (downsampled != bitmap) {
+            downsampled.recycle()
+        }
+        result
     }
 
     suspend fun recognizeTextFromFile(context: Context, filePath: String): OcrExtractionResult = withContext(Dispatchers.IO) {
@@ -62,10 +67,12 @@ object OcrHelper {
                     candidateBrandOrColor = null
                 )
             }
-            val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+            val bitmap = PhotoStorageHelper.loadDownsampledBitmap(file.absolutePath, 1280, 1280, preferLowMemory = false)
             if (bitmap != null) {
                 val image = InputImage.fromBitmap(bitmap, 0)
-                processImage(image)
+                val result = processImage(image)
+                bitmap.recycle()
+                result
             } else {
                 OcrExtractionResult("", null, null)
             }

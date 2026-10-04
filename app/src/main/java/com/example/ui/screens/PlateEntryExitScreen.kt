@@ -32,6 +32,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
@@ -39,7 +40,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.DirectionsBike
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Event
@@ -59,10 +59,10 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -308,7 +308,7 @@ fun PlateEntryExitScreen(
                                     Icon(
                                         imageVector = when (ticket.vehicleType.uppercase()) {
                                             "CARRO" -> Icons.Default.DirectionsCar
-                                            "BICICLETA" -> Icons.Default.DirectionsBike
+                                            "BICICLETA" -> Icons.AutoMirrored.Filled.DirectionsBike
                                             else -> Icons.Default.TwoWheeler
                                         },
                                         contentDescription = null,
@@ -525,7 +525,7 @@ private fun ActiveVehicleExitSection(
                 }
 
                 if (ticket.hasHelmet) {
-                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -614,7 +614,7 @@ private fun ActiveVehicleExitSection(
                     )
                 }
 
-                Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 // Total to pay
                 Row(
@@ -868,7 +868,7 @@ private fun NewVehicleEntrySection(
                                     imageVector = when (typeCode) {
                                         "MOTO" -> Icons.Default.TwoWheeler
                                         "CARRO" -> Icons.Default.DirectionsCar
-                                        else -> Icons.Default.DirectionsBike
+                                        else -> Icons.AutoMirrored.Filled.DirectionsBike
                                     },
                                     contentDescription = null
                                 )

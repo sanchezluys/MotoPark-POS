@@ -342,7 +342,11 @@ private fun ActiveTicketCard(
                                 .background(Color.Black)
                         ) {
                             AsyncImage(
-                                model = File(ticket.motoPhotoPath),
+                                model = coil.request.ImageRequest.Builder(LocalContext.current)
+                                    .data(File(ticket.motoPhotoPath))
+                                    .size(128, 128)
+                                    .crossfade(true)
+                                    .build(),
                                 contentDescription = "Foto Moto",
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize()

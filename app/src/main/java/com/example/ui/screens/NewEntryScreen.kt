@@ -26,10 +26,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DirectionsBike
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Event
@@ -46,7 +46,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -228,7 +228,7 @@ fun NewEntryScreen(
             )
             VehicleTypeChip(
                 label = "Bicicleta",
-                icon = Icons.Default.DirectionsBike,
+                icon = Icons.AutoMirrored.Filled.DirectionsBike,
                 isSelected = vehicleType == "BICICLETA",
                 onClick = {
                     vehicleType = "BICICLETA"
@@ -509,7 +509,7 @@ fun NewEntryScreen(
 
                 if (hasHelmet) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    Divider(color = Color(0xFF2E7D32).copy(alpha = 0.2f))
+                    HorizontalDivider(color = Color(0xFF2E7D32).copy(alpha = 0.2f))
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Row(
