@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.SportsMotorsports
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.TwoWheeler
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -37,7 +38,9 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -53,22 +56,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.BuildConfig
+import com.example.R
 import com.example.data.model.RateConfig
 import com.example.ui.ParkingViewModel
+import com.example.util.AppUpdateController
+import com.example.util.AppUpdateState
 import com.example.util.Formatters
+import kotlinx.coroutines.flow.MutableStateFlow
 
 @Composable
 fun SettingsScreen(
     viewModel: ParkingViewModel,
+    appUpdateController: AppUpdateController? = null,
     modifier: Modifier = Modifier
 ) {
     val rateConfig by viewModel.rateConfig.collectAsStateWithLifecycle()
+    val fallbackUpdateFlow = remember { MutableStateFlow<AppUpdateState>(AppUpdateState.Idle) }
+    val updateState by (appUpdateController?.updateState ?: fallbackUpdateFlow).collectAsStateWithLifecycle()
     val scrollState = rememberScrollState()
 
     // Workshop & Business info
@@ -867,6 +879,132 @@ fun SettingsScreen(
             Icon(Icons.Default.Save, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
             Text("GUARDAR TODA LA CONFIGURACIÓN", fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 8. Play Store App Updates
+        if (appUpdateController != null) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.update_settings_title),
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                            )
+                            Text(
+                                text = stringResource(R.string.update_settings_version, BuildConfig.VERSION_NAME),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    when (val state = updateState) {
+                        is AppUpdateState.Checking -> {
+                            Text(
+                                text = stringResource(R.string.update_settings_checking),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                        is AppUpdateState.Available -> {
+                            Text(
+                                text = stringResource(R.string.update_available_subtitle),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = { appUpdateController.startFlexibleOrImmediateUpdate() },
+                                modifier = Modifier.fillMaxWidth().testTag("settings_install_update_button")
+                            ) {
+                                Text(stringResource(R.string.update_action_install))
+                            }
+                        }
+                        is AppUpdateState.Downloading -> {
+                            Text(
+                                text = stringResource(R.string.update_downloading_progress, state.progressPercent),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LinearProgressIndicator(
+                                progress = { state.progressPercent / 100f },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        is AppUpdateState.Downloaded -> {
+                            Text(
+                                text = stringResource(R.string.update_downloaded_message),
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = { appUpdateController.completeUpdate() },
+                                modifier = Modifier.fillMaxWidth().testTag("settings_restart_update_button")
+                            ) {
+                                Text(stringResource(R.string.update_action_restart))
+                            }
+                        }
+                        is AppUpdateState.UpToDate -> {
+                            Text(
+                                text = stringResource(R.string.update_settings_up_to_date),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = { appUpdateController.checkForUpdates(userInitiated = true) },
+                                modifier = Modifier.fillMaxWidth().testTag("check_updates_button")
+                            ) {
+                                Text(stringResource(R.string.update_settings_check_button))
+                            }
+                        }
+                        is AppUpdateState.Unavailable -> {
+                            Text(
+                                text = stringResource(R.string.update_settings_unavailable),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = { appUpdateController.checkForUpdates(userInitiated = true) },
+                                modifier = Modifier.fillMaxWidth().testTag("check_updates_button")
+                            ) {
+                                Text(stringResource(R.string.update_settings_check_button))
+                            }
+                        }
+                        is AppUpdateState.Idle -> {
+                            OutlinedButton(
+                                onClick = { appUpdateController.checkForUpdates(userInitiated = true) },
+                                modifier = Modifier.fillMaxWidth().testTag("check_updates_button")
+                            ) {
+                                Text(stringResource(R.string.update_settings_check_button))
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(40.dp))

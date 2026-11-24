@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -69,6 +70,7 @@ fun TicketReceiptDialog(
     ) {
         Surface(
             modifier = Modifier
+                .safeDrawingPadding()
                 .fillMaxWidth(0.94f)
                 .padding(vertical = 24.dp)
                 .clip(RoundedCornerShape(20.dp))

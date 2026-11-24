@@ -1,3 +1,16 @@
 <resources>
     <string name="app_name">MotoPark</string>
+    <string name="update_available_title">Nueva versión disponible</string>
+    <string name="update_available_subtitle">Hay una actualización de MotoPark lista en Google Play Store.</string>
+    <string name="update_action_install">Actualizar</string>
+    <string name="update_action_later">Luego</string>
+    <string name="update_downloading_progress">Descargando actualización: %1$d%%</string>
+    <string name="update_downloaded_message">Actualización descargada y lista para instalar.</string>
+    <string name="update_action_restart">Reiniciar</string>
+    <string name="update_settings_title">Actualizaciones de Play Store</string>
+    <string name="update_settings_version">Versión instalada: v%1$s</string>
+    <string name="update_settings_check_button">Buscar actualización</string>
+    <string name="update_settings_checking">Verificando en Google Play…</string>
+    <string name="update_settings_up_to_date">Tienes la última versión disponible.</string>
+    <string name="update_settings_unavailable">Disponible al instalar desde Google Play Store.</string>
 </resources>

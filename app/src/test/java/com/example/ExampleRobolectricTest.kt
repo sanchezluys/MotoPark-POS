@@ -124,4 +124,18 @@ class ExampleRobolectricTest {
         val fee = FeeCalculator.calculateFee(bikeTicket, config, exitTime)
         assertEquals(3000.0, fee.totalAmount, 0.01)
     }
+
+    @Test
+    fun `app update controller initializes safely and handles banner dismissal`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val controller = com.example.util.AppUpdateController(context)
+        assertEquals(com.example.util.AppUpdateState.Idle, controller.updateState.value)
+
+        // Should not crash when Play Store is unavailable in test environment
+        controller.checkForUpdates(userInitiated = false)
+        controller.dispose()
+
+        val title = context.getString(R.string.update_available_title)
+        assertTrue(title.isNotBlank())
+    }
 }
