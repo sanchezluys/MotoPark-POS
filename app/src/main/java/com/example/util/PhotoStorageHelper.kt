@@ -3,6 +3,8 @@ package com.example.util
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
@@ -20,9 +22,16 @@ object PhotoStorageHelper {
         return photosDir
     }
 
-    fun createTempImageUri(context: Context, prefix: String = "photo"): Pair<Uri, File> {
-        val photosDir = getPhotosDirectory(context)
-        val file = File.createTempFile("${prefix}_${System.currentTimeMillis()}_", ".jpg", photosDir)
+    fun createTempImageUri(
+        context: Context,
+        prefix: String = "photo",
+        useCacheDir: Boolean = false
+    ): Pair<Uri, File> {
+        val targetDir = if (useCacheDir) context.cacheDir else getPhotosDirectory(context)
+        if (!targetDir.exists()) {
+            targetDir.mkdirs()
+        }
+        val file = File.createTempFile("${prefix}_${System.currentTimeMillis()}_", ".jpg", targetDir)
         val authority = "${context.packageName}.fileprovider"
         val uri = FileProvider.getUriForFile(context, authority, file)
         return Pair(uri, file)
@@ -45,6 +54,85 @@ object PhotoStorageHelper {
             scaledBitmap.recycle()
         }
         file.absolutePath
+    }
+
+    /**
+     * Applies EXIF orientation metadata to a decoded bitmap so photos taken in any device
+     * rotation are oriented upright for display and OCR text recognition.
+     */
+    fun applyExifOrientation(filePath: String, bitmap: Bitmap): Bitmap {
+        val orientation = try {
+            ExifInterface(filePath).getAttributeInt(
+                ExifInterface.TAG_ORIENTATION,
+                ExifInterface.ORIENTATION_NORMAL
+            )
+        } catch (_: Exception) {
+            ExifInterface.ORIENTATION_NORMAL
+        }
+
+        val matrix = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+            ExifInterface.ORIENTATION_TRANSPOSE -> {
+                matrix.postRotate(90f)
+                matrix.postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_TRANSVERSE -> {
+                matrix.postRotate(270f)
+                matrix.postScale(-1f, 1f)
+            }
+            else -> return bitmap
+        }
+
+        return try {
+            val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            if (rotated != bitmap) {
+                bitmap.recycle()
+            }
+            rotated
+        } catch (_: OutOfMemoryError) {
+            bitmap
+        }
+    }
+
+    /**
+     * Downsamples and normalizes EXIF rotation of an already-captured image file in-place.
+     */
+    suspend fun normalizeCapturedImage(
+        filePath: String,
+        maxDimension: Int = 1280
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val file = File(filePath)
+            if (!file.exists() || file.length() <= 0L) return@withContext false
+
+            val decoded = loadDownsampledBitmap(
+                filePath = file.absolutePath,
+                reqWidth = maxDimension,
+                reqHeight = maxDimension,
+                preferLowMemory = false
+            ) ?: return@withContext false
+
+            val oriented = applyExifOrientation(file.absolutePath, decoded)
+            val normalized = downsampleBitmap(oriented, maxDimension)
+
+            FileOutputStream(file).use { out ->
+                normalized.compress(Bitmap.CompressFormat.JPEG, 88, out)
+                out.flush()
+            }
+
+            if (normalized != oriented) {
+                oriented.recycle()
+            }
+            normalized.recycle()
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     /**
@@ -88,6 +176,7 @@ object PhotoStorageHelper {
                 inJustDecodeBounds = true
             }
             BitmapFactory.decodeFile(file.absolutePath, options)
+            if (options.outWidth <= 0 || options.outHeight <= 0) return null
 
             // Calculate inSampleSize
             options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
@@ -121,6 +210,7 @@ object PhotoStorageHelper {
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 BitmapFactory.decodeStream(inputStream, null, options)
             }
+            if (options.outWidth <= 0 || options.outHeight <= 0) return null
 
             options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
             options.inJustDecodeBounds = false

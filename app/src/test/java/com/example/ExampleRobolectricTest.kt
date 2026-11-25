@@ -138,4 +138,41 @@ class ExampleRobolectricTest {
         val title = context.getString(R.string.update_available_title)
         assertTrue(title.isNotBlank())
     }
+
+    @Test
+    fun `ocr handles recycled bitmap and missing file gracefully without throwing`() = kotlinx.coroutines.test.runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+
+        val bitmap = android.graphics.Bitmap.createBitmap(100, 100, android.graphics.Bitmap.Config.ARGB_8888)
+        bitmap.recycle()
+        val recycledResult = OcrHelper.recognizeTextFromBitmap(bitmap)
+        assertEquals("", recycledResult.rawText)
+        assertEquals(null, recycledResult.candidatePlate)
+        assertNotNull(recycledResult.errorMessage)
+
+        val missingResult = OcrHelper.recognizeTextFromFile(context, "/nonexistent/path/plate.jpg")
+        assertEquals("", missingResult.rawText)
+        assertEquals(null, missingResult.candidatePlate)
+        assertNotNull(missingResult.errorMessage)
+    }
+
+    @Test
+    fun `photo storage helper creates temporary scan uri and downsamples bitmap`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val (uri, file) = com.example.util.PhotoStorageHelper.createTempImageUri(
+            context = context,
+            prefix = "test_scan",
+            useCacheDir = true
+        )
+        assertNotNull(uri)
+        assertTrue(file.exists())
+        file.delete()
+
+        val large = android.graphics.Bitmap.createBitmap(2000, 1000, android.graphics.Bitmap.Config.ARGB_8888)
+        val downsampled = com.example.util.PhotoStorageHelper.downsampleBitmap(large, maxDimension = 1000)
+        assertEquals(1000, downsampled.width)
+        assertEquals(500, downsampled.height)
+        downsampled.recycle()
+        large.recycle()
+    }
 }

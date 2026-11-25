@@ -79,12 +79,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.R
 import com.example.data.model.ParkingTicket
 import com.example.ui.ParkingViewModel
 import com.example.ui.components.PhotoCaptureCard
 import com.example.util.CalendarHelper
 import com.example.util.OcrHelper
 import com.example.util.PhotoStorageHelper
+import com.example.util.rememberCameraCaptureLauncher
 import kotlinx.coroutines.launch
 
 @Composable
@@ -138,23 +140,39 @@ fun NewEntryScreen(
     }
 
     // Direct Plate Quick Scan camera launcher
-    val quickScanLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicturePreview()
-    ) { bitmap: Bitmap? ->
-        if (bitmap != null) {
+    val launchQuickPlateScan = rememberCameraCaptureLauncher(
+        prefix = "plate_scan",
+        useCacheDir = false,
+        onPhotoFileCaptured = { capturedFile ->
             coroutineScope.launch {
-                val path = PhotoStorageHelper.saveBitmapToFile(context, bitmap, "plate_scan")
+                PhotoStorageHelper.normalizeCapturedImage(capturedFile.absolutePath, maxDimension = 1280)
+                val path = capturedFile.absolutePath
                 platePhotoPath = path
-                viewModel.processOcrFromBitmap(bitmap) { ocrResult ->
+                viewModel.processOcrFromFile(context, path) { ocrResult ->
                     isOcrProcessed = true
-                    ocrExtractedText = ocrResult.rawText
-                    if (ocrResult.candidatePlate != null) {
-                        plateText = ocrResult.candidatePlate
+                    if (ocrResult.errorMessage != null) {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.ocr_scan_error, ocrResult.errorMessage),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        if (ocrResult.rawText.isNotBlank()) {
+                            ocrExtractedText = ocrResult.rawText
+                        }
+                        val detectedPlate = ocrResult.candidatePlate
+                            ?: OcrHelper.extractPlateCandidate(ocrResult.rawText)
+                        if (!detectedPlate.isNullOrBlank()) {
+                            plateText = detectedPlate
+                            Toast.makeText(context, "Placa detectada: $detectedPlate", Toast.LENGTH_SHORT).show()
+                        } else if (ocrResult.rawText.isBlank()) {
+                            Toast.makeText(context, "No se reconoció la placa en la imagen", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
             }
         }
-    }
+    )
 
     // Lookup customer when typing plate
     LaunchedEffect(plateText) {
@@ -272,7 +290,7 @@ fun NewEntryScreen(
 
             // Quick Camera Scan Plate Button
             OutlinedButton(
-                onClick = { quickScanLauncher.launch(null) },
+                onClick = { launchQuickPlateScan() },
                 modifier = Modifier
                     .height(56.dp)
                     .testTag("scan_plate_camera_button"),
@@ -333,10 +351,12 @@ fun NewEntryScreen(
                         // Auto-run OCR on Moto photo
                         viewModel.processOcrFromFile(context, savedPath) { ocrResult ->
                             isOcrProcessed = true
-                            if (ocrExtractedText.isBlank()) {
-                                ocrExtractedText = ocrResult.rawText
-                            } else {
-                                ocrExtractedText += "\n" + ocrResult.rawText
+                            if (ocrResult.errorMessage == null && ocrResult.rawText.isNotBlank()) {
+                                if (ocrExtractedText.isBlank()) {
+                                    ocrExtractedText = ocrResult.rawText
+                                } else {
+                                    ocrExtractedText += "\n" + ocrResult.rawText
+                                }
                             }
                             if (plateText.isBlank() && ocrResult.candidatePlate != null) {
                                 plateText = ocrResult.candidatePlate

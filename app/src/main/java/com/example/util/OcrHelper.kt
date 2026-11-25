@@ -2,8 +2,8 @@ package com.example.util
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -13,15 +13,21 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.regex.Pattern
 import kotlin.coroutines.resume
+import kotlin.math.ceil
 
 data class OcrExtractionResult(
     val rawText: String,
     val candidatePlate: String?,
     val candidateBrandOrColor: String?,
-    val confidenceScore: Float = 1.0f
+    val confidenceScore: Float = 1.0f,
+    val errorMessage: String? = null
 )
 
 object OcrHelper {
+
+    private const val MIN_MLKIT_DIMENSION = 32
+    private const val TARGET_MIN_DIMENSION = 64
+    private const val MAX_OCR_DIMENSION = 1280
 
     private val recognizer by lazy {
         TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -48,37 +54,93 @@ object OcrHelper {
     )
 
     suspend fun recognizeTextFromBitmap(bitmap: Bitmap): OcrExtractionResult = withContext(Dispatchers.Default) {
-        val downsampled = PhotoStorageHelper.downsampleBitmap(bitmap, 1280)
-        val image = InputImage.fromBitmap(downsampled, 0)
-        val result = processImage(image)
-        if (downsampled != bitmap) {
-            downsampled.recycle()
+        if (bitmap.isRecycled || bitmap.width <= 0 || bitmap.height <= 0) {
+            return@withContext OcrExtractionResult(
+                rawText = "",
+                candidatePlate = null,
+                candidateBrandOrColor = null,
+                errorMessage = "Imagen inválida o vacía"
+            )
         }
-        result
+
+        var workingBitmap: Bitmap = bitmap
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && workingBitmap.config == Bitmap.Config.HARDWARE) {
+                workingBitmap = workingBitmap.copy(Bitmap.Config.ARGB_8888, false)
+            }
+
+            if (workingBitmap.width < MIN_MLKIT_DIMENSION || workingBitmap.height < MIN_MLKIT_DIMENSION) {
+                val minSide = minOf(workingBitmap.width, workingBitmap.height).coerceAtLeast(1)
+                val scale = TARGET_MIN_DIMENSION.toFloat() / minSide.toFloat()
+                val targetW = ceil(workingBitmap.width * scale).toInt().coerceAtLeast(MIN_MLKIT_DIMENSION)
+                val targetH = ceil(workingBitmap.height * scale).toInt().coerceAtLeast(MIN_MLKIT_DIMENSION)
+                val upscaled = Bitmap.createScaledBitmap(workingBitmap, targetW, targetH, true)
+                if (workingBitmap != bitmap && workingBitmap != upscaled) {
+                    workingBitmap.recycle()
+                }
+                workingBitmap = upscaled
+            }
+
+            val downsampled = PhotoStorageHelper.downsampleBitmap(workingBitmap, MAX_OCR_DIMENSION)
+            if (workingBitmap != bitmap && workingBitmap != downsampled) {
+                workingBitmap.recycle()
+            }
+            workingBitmap = downsampled
+
+            val image = InputImage.fromBitmap(workingBitmap, 0)
+            processImage(image)
+        } catch (e: Exception) {
+            OcrExtractionResult(
+                rawText = "",
+                candidatePlate = null,
+                candidateBrandOrColor = null,
+                errorMessage = e.localizedMessage ?: "No se pudo analizar la imagen"
+            )
+        } finally {
+            if (workingBitmap != bitmap && !workingBitmap.isRecycled) {
+                workingBitmap.recycle()
+            }
+        }
     }
 
     suspend fun recognizeTextFromFile(context: Context, filePath: String): OcrExtractionResult = withContext(Dispatchers.IO) {
         try {
             val file = File(filePath)
-            if (!file.exists()) {
+            if (!file.exists() || file.length() <= 0L) {
                 return@withContext OcrExtractionResult(
                     rawText = "",
                     candidatePlate = null,
-                    candidateBrandOrColor = null
+                    candidateBrandOrColor = null,
+                    errorMessage = "El archivo de imagen no existe"
                 )
             }
-            val bitmap = PhotoStorageHelper.loadDownsampledBitmap(file.absolutePath, 1280, 1280, preferLowMemory = false)
-            if (bitmap != null) {
-                val image = InputImage.fromBitmap(bitmap, 0)
-                val result = processImage(image)
-                bitmap.recycle()
-                result
-            } else {
-                OcrExtractionResult("", null, null)
+            val decoded = PhotoStorageHelper.loadDownsampledBitmap(
+                filePath = file.absolutePath,
+                reqWidth = MAX_OCR_DIMENSION,
+                reqHeight = MAX_OCR_DIMENSION,
+                preferLowMemory = false
+            ) ?: return@withContext OcrExtractionResult(
+                rawText = "",
+                candidatePlate = null,
+                candidateBrandOrColor = null,
+                errorMessage = "No se pudo decodificar la fotografía"
+            )
+
+            val oriented = PhotoStorageHelper.applyExifOrientation(file.absolutePath, decoded)
+            try {
+                recognizeTextFromBitmap(oriented)
+            } finally {
+                if (!oriented.isRecycled) {
+                    oriented.recycle()
+                }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
-            OcrExtractionResult("", null, null)
+            OcrExtractionResult(
+                rawText = "",
+                candidatePlate = null,
+                candidateBrandOrColor = null,
+                errorMessage = e.localizedMessage ?: "Error leyendo la fotografía"
+            )
         }
     }
 
@@ -87,36 +149,56 @@ object OcrHelper {
             val image = InputImage.fromFilePath(context, uri)
             processImage(image)
         } catch (e: Exception) {
-            e.printStackTrace()
-            OcrExtractionResult("", null, null)
+            OcrExtractionResult(
+                rawText = "",
+                candidatePlate = null,
+                candidateBrandOrColor = null,
+                errorMessage = e.localizedMessage ?: "Error cargando la imagen"
+            )
         }
     }
 
     private suspend fun processImage(image: InputImage): OcrExtractionResult =
         suspendCancellableCoroutine { continuation ->
-            recognizer.process(image)
-                .addOnSuccessListener { visionText ->
-                    val fullText = visionText.text
-                    val candidatePlate = extractPlateCandidate(fullText)
-                    val candidateBrandOrColor = extractBrandOrColor(fullText)
+            try {
+                recognizer.process(image)
+                    .addOnSuccessListener { visionText ->
+                        if (!continuation.isActive) return@addOnSuccessListener
+                        val fullText = visionText.text
+                        val candidatePlate = extractPlateCandidate(fullText)
+                        val candidateBrandOrColor = extractBrandOrColor(fullText)
 
-                    continuation.resume(
-                        OcrExtractionResult(
-                            rawText = fullText.trim(),
-                            candidatePlate = candidatePlate,
-                            candidateBrandOrColor = candidateBrandOrColor
+                        continuation.resume(
+                            OcrExtractionResult(
+                                rawText = fullText.trim(),
+                                candidatePlate = candidatePlate,
+                                candidateBrandOrColor = candidateBrandOrColor
+                            )
                         )
-                    )
-                }
-                .addOnFailureListener { exception ->
+                    }
+                    .addOnFailureListener { exception ->
+                        if (!continuation.isActive) return@addOnFailureListener
+                        continuation.resume(
+                            OcrExtractionResult(
+                                rawText = "",
+                                candidatePlate = null,
+                                candidateBrandOrColor = null,
+                                errorMessage = exception.localizedMessage ?: "Error en el motor OCR"
+                            )
+                        )
+                    }
+            } catch (e: Exception) {
+                if (continuation.isActive) {
                     continuation.resume(
                         OcrExtractionResult(
-                            rawText = "Error al procesar imagen: ${exception.localizedMessage ?: "Desconocido"}",
+                            rawText = "",
                             candidatePlate = null,
-                            candidateBrandOrColor = null
+                            candidateBrandOrColor = null,
+                            errorMessage = e.localizedMessage ?: "Error iniciando el lector OCR"
                         )
                     )
                 }
+            }
         }
 
     fun extractPlateCandidate(text: String): String? {

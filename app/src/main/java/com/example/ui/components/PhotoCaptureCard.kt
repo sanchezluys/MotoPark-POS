@@ -1,9 +1,5 @@
 package com.example.ui.components
 
-import android.graphics.Bitmap
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -54,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.util.PhotoStorageHelper
+import com.example.util.rememberCameraCaptureLauncher
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -72,19 +69,24 @@ fun PhotoCaptureCard(
     val coroutineScope = rememberCoroutineScope()
     var isSaving by remember { mutableStateOf(false) }
 
-    // Camera launcher using thumbnail bitmap (fast and robust on all Android versions)
-    val takePictureLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicturePreview()
-    ) { bitmap: Bitmap? ->
-        if (bitmap != null) {
+    val launchCameraCapture = rememberCameraCaptureLauncher(
+        prefix = tag,
+        useCacheDir = false,
+        onPhotoFileCaptured = { capturedFile ->
             coroutineScope.launch {
                 isSaving = true
-                val path = PhotoStorageHelper.saveBitmapToFile(context, bitmap, tag)
-                isSaving = false
-                onPhotoCaptured(path)
+                try {
+                    PhotoStorageHelper.normalizeCapturedImage(
+                        filePath = capturedFile.absolutePath,
+                        maxDimension = 1280
+                    )
+                    onPhotoCaptured(capturedFile.absolutePath)
+                } finally {
+                    isSaving = false
+                }
             }
         }
-    }
+    )
 
     Card(
         modifier = modifier
@@ -203,7 +205,7 @@ fun PhotoCaptureCard(
                             .padding(8.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color.Black.copy(alpha = 0.65f))
-                            .clickable { takePictureLauncher.launch(null) }
+                            .clickable { if (!isSaving) launchCameraCapture() }
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Row(
@@ -226,7 +228,7 @@ fun PhotoCaptureCard(
             } else {
                 // Empty photo button
                 OutlinedButton(
-                    onClick = { takePictureLauncher.launch(null) },
+                    onClick = { if (!isSaving) launchCameraCapture() },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(46.dp)

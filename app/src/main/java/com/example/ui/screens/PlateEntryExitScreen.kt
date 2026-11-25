@@ -99,6 +99,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.R
 import com.example.data.model.ParkingTicket
 import com.example.data.model.RateConfig
 import com.example.ui.ParkingViewModel
@@ -108,6 +109,7 @@ import com.example.util.FeeCalculator
 import com.example.util.Formatters
 import com.example.util.OcrHelper
 import com.example.util.PhotoStorageHelper
+import com.example.util.rememberCameraCaptureLauncher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -137,37 +139,54 @@ fun PlateEntryExitScreen(
 
     // Camera OCR quick scanner launcher for license plate
     var isOcrScanningPlate by remember { mutableStateOf(false) }
-    val plateOcrCameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicturePreview()
-    ) { bitmap: Bitmap? ->
-        if (bitmap != null) {
+    val launchPlateScanner = rememberCameraCaptureLauncher(
+        prefix = "scan_plate",
+        useCacheDir = true,
+        onPhotoFileCaptured = { capturedFile ->
             isOcrScanningPlate = true
             coroutineScope.launch {
                 try {
-                    val ocrResult = OcrHelper.recognizeTextFromBitmap(bitmap)
-                    val foundPlate = ocrResult.candidatePlate ?: OcrHelper.extractPlateCandidate(ocrResult.rawText)
-                    if (!foundPlate.isNullOrBlank()) {
-                        plateQuery = foundPlate.uppercase()
-                        Toast.makeText(context, "Placa detectada: $foundPlate", Toast.LENGTH_SHORT).show()
-                    } else if (ocrResult.rawText.isNotBlank()) {
-                        val simpleTokens = ocrResult.rawText.replace("\n", " ").split(" ")
-                        val candidate = simpleTokens.firstOrNull { it.length in 5..7 }
-                        if (candidate != null) {
-                            plateQuery = candidate.uppercase().replace("[^A-Z0-9]".toRegex(), "")
-                        } else {
-                            Toast.makeText(context, "Texto leído: ${ocrResult.rawText.take(20)}", Toast.LENGTH_SHORT).show()
-                        }
+                    PhotoStorageHelper.normalizeCapturedImage(capturedFile.absolutePath, maxDimension = 1280)
+                    val ocrResult = OcrHelper.recognizeTextFromFile(context, capturedFile.absolutePath)
+                    if (ocrResult.errorMessage != null) {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.ocr_scan_error, ocrResult.errorMessage),
+                            Toast.LENGTH_SHORT
+                        ).show()
                     } else {
-                        Toast.makeText(context, "No se reconoció la placa en la imagen", Toast.LENGTH_SHORT).show()
+                        val foundPlate = ocrResult.candidatePlate ?: OcrHelper.extractPlateCandidate(ocrResult.rawText)
+                        if (!foundPlate.isNullOrBlank()) {
+                            plateQuery = foundPlate.uppercase()
+                            Toast.makeText(context, "Placa detectada: $foundPlate", Toast.LENGTH_SHORT).show()
+                        } else if (ocrResult.rawText.isNotBlank()) {
+                            val simpleTokens = ocrResult.rawText.replace("\n", " ").split(Regex("\\s+"))
+                            val candidate = simpleTokens.firstOrNull { token ->
+                                val cleaned = token.uppercase().replace("[^A-Z0-9]".toRegex(), "")
+                                cleaned.length in 5..7 && cleaned.any { it.isDigit() }
+                            }
+                            if (candidate != null) {
+                                plateQuery = candidate.uppercase().replace("[^A-Z0-9]".toRegex(), "")
+                            } else {
+                                Toast.makeText(context, "Texto leído: ${ocrResult.rawText.take(24)}", Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            Toast.makeText(context, "No se reconoció la placa en la imagen", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 } catch (e: Exception) {
-                    Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.ocr_scan_error, e.localizedMessage ?: "Error"),
+                        Toast.LENGTH_SHORT
+                    ).show()
                 } finally {
+                    capturedFile.delete()
                     isOcrScanningPlate = false
                 }
             }
         }
-    }
+    )
 
     val scrollState = rememberScrollState()
 
@@ -255,7 +274,9 @@ fun PlateEntryExitScreen(
                     // OCR Camera Button
                     Button(
                         onClick = {
-                            plateOcrCameraLauncher.launch(null)
+                            if (!isOcrScanningPlate) {
+                                launchPlateScanner()
+                            }
                         },
                         modifier = Modifier
                             .height(56.dp)
@@ -909,7 +930,7 @@ private fun NewVehicleEntrySection(
                     onPhotoCaptured = { savedPath ->
                         motoPhotoPath = savedPath
                         viewModel.processOcrFromFile(context, savedPath) { ocrResult ->
-                            if (ocrResult.rawText.isNotBlank()) {
+                            if (ocrResult.errorMessage == null && ocrResult.rawText.isNotBlank()) {
                                 ocrVehicleText = ocrResult.rawText
                                 Toast.makeText(context, "Texto detectado en la moto", Toast.LENGTH_SHORT).show()
                             }
